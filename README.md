@@ -44,3 +44,4 @@ Luego visita `http://localhost:3000`.
 - Asteroides se parten en fragmentos más pequeños al ser destruidos
 - Partículas de explosión al destruir asteroides
 - Power-up "Velocidad": al destruir asteroides puede aparecer un ícono `»` que duplica la propulsión durante 5 segundos
+- Estrella fugaz: aparece periódicamente cruzando el campo a alta velocidad; si la aciertas da 250 puntos bonus, si te toca pierdes una vida y desaparece sola tras unos segundos
