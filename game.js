@@ -184,6 +184,7 @@ class Ship {
     this.invincible    = 3;
     this.shootCooldown = 0;
     this.speedBoost    = 0;
+    this.tripleShot    = 0;
     this.dead          = false;
   }
 
@@ -192,6 +193,7 @@ class Ship {
     if (this.invincible    > 0) this.invincible    -= dt;
     if (this.shootCooldown > 0) this.shootCooldown -= dt;
     if (this.speedBoost    > 0) this.speedBoost    -= dt;
+    if (this.tripleShot    > 0) this.tripleShot    -= dt;
 
     const ROT    = 3.5;    // rad/s
     const THRUST = 260;    // px/s²
@@ -221,6 +223,19 @@ class Ship {
     const NOSE = 21;
     const ox = this.x + Math.cos(this.angle) * NOSE;
     const oy = this.y + Math.sin(this.angle) * NOSE;
+
+    // Power-up "Triple disparo": 3 balas paralelas durante 5 s
+    if (this.tripleShot > 0) {
+      const GAP   = 8;  // separación lateral entre balas
+      const px    = -Math.sin(this.angle) * GAP;
+      const py    =  Math.cos(this.angle) * GAP;
+      return [
+        new Bullet(ox + px, oy + py, this.angle),
+        new Bullet(ox,      oy,      this.angle),
+        new Bullet(ox - px, oy - py, this.angle),
+      ];
+    }
+
     return [new Bullet(ox, oy, this.angle)];
   }
 
@@ -291,11 +306,12 @@ class Particle {
   }
 }
 
-// ── PowerUp (velocidad) ───────────────────────────────────────────────────────
+// ── PowerUp (velocidad / triple disparo) ─────────────────────────────────────
 class PowerUp {
-  constructor(x, y) {
+  constructor(x, y, type = 'velocidad') {
     this.x = x;
     this.y = y;
+    this.type = type;
     this.radius = 10;
     this.vx = rand(-20, 20);
     this.vy = rand(-20, 20);
@@ -321,14 +337,24 @@ class PowerUp {
     ctx.lineJoin    = 'round';
 
     // Doble chevron: símbolo de velocidad
-    ctx.beginPath();
-    ctx.moveTo(-6, -6);
-    ctx.lineTo( 0,  0);
-    ctx.lineTo(-6,  6);
-    ctx.moveTo( 0, -6);
-    ctx.lineTo( 6,  0);
-    ctx.lineTo( 0,  6);
-    ctx.stroke();
+    if (this.type === 'velocidad') {
+      ctx.beginPath();
+      ctx.moveTo(-6, -6);
+      ctx.lineTo( 0,  0);
+      ctx.lineTo(-6,  6);
+      ctx.moveTo( 0, -6);
+      ctx.lineTo( 6,  0);
+      ctx.lineTo( 0,  6);
+      ctx.stroke();
+    } else {
+      // Tres trazos en fila: símbolo de triple disparo
+      for (let i = -1; i <= 1; i++) {
+        ctx.beginPath();
+        ctx.moveTo(i * 6, -5);
+        ctx.lineTo(i * 6,  5);
+        ctx.stroke();
+      }
+    }
     ctx.restore();
   }
 }
@@ -386,6 +412,7 @@ function killShip() {
   explode(ship.x, ship.y, 14);
   ship.dead       = true;
   ship.speedBoost = 0;  // El power-up se pierde al morir
+  ship.tripleShot = 0;
   lives--;
   if (lives <= 0) {
     state = 'gameover';
@@ -462,7 +489,7 @@ function update(dt) {
 
         // Probabilidad de soltar power-up (máximo 1 en el campo)
         if (powerUps.length === 0 && Math.random() < 0.15)
-          powerUps.push(new PowerUp(a.x, a.y));
+          powerUps.push(new PowerUp(a.x, a.y, Math.random() < 0.5 ? 'velocidad' : 'triple'));
       }
     }
   }
@@ -485,7 +512,8 @@ function update(dt) {
   for (const pu of powerUps) {
     if (dist(ship, pu) < ship.radius + pu.radius) {
       pu.dead = true;
-      ship.speedBoost = 5;
+      if (pu.type === 'triple') ship.tripleShot = 5;
+      else                      ship.speedBoost = 5;
       explode(ship.x, ship.y, 6);
     }
   }
@@ -548,6 +576,9 @@ function drawHUD() {
 
   if (ship.speedBoost > 0)
     ctx.fillText(`VELOCIDAD ${ship.speedBoost.toFixed(1)}s`, 14, H - 14);
+
+  if (ship.tripleShot > 0)
+    ctx.fillText(`TRIPLE ${ship.tripleShot.toFixed(1)}s`, 14, H - (ship.speedBoost > 0 ? 34 : 14));
 }
 
 function drawOverlay(title, sub) {
