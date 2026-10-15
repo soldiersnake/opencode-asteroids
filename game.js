@@ -169,6 +169,67 @@ class ShootingStar {
   }
 }
 
+// ── Skins ─────────────────────────────────────────────────────────────────────
+// Cada skin define silueta (path), color de trazo y color de la llama
+const SKINS = [
+  {
+    name: 'CLÁSICA',
+    stroke: '#fff',
+    flame: 'rgba(255, 130, 0, 0.85)',
+    path: [[20, 0], [-12, -9], [-7, 0], [-12, 9]],
+    lifePath: [[9, 0], [-6, -5], [-3, 0], [-6, 5]],
+  },
+  {
+    name: 'ROJA',
+    stroke: '#ff4d4d',
+    flame: 'rgba(255, 80, 80, 0.9)',
+    path: [[22, 0], [-14, -10], [-6, 0], [-14, 10]],
+    lifePath: [[9, 0], [-6, -5], [-3, 0], [-6, 5]],
+  },
+  {
+    name: 'AZUL',
+    stroke: '#4dd2ff',
+    flame: 'rgba(80, 200, 255, 0.9)',
+    path: [[22, 0], [-10, -11], [-4, -3], [-4, 3], [-10, 11]],
+    lifePath: [[9, 0], [-5, -6], [-2, 0], [-5, 6]],
+  },
+  {
+    name: 'VERDE',
+    stroke: '#5dff5d',
+    flame: 'rgba(180, 255, 80, 0.9)',
+    path: [[18, 0], [-12, -8], [-12, 0], [-12, 8]],
+    lifePath: [[8, 0], [-5, -4], [-3, 0], [-5, 4]],
+  },
+];
+
+let currentSkin = 0;
+let skinFlash = 0;   // Indicador temporal en el HUD tras cambiar de skin
+
+function currentSkinOf() {
+  return SKINS[currentSkin];
+}
+
+function loadSkin() {
+  try {
+    const saved = parseInt(localStorage.getItem('asteroids-skin'), 10);
+    if (Number.isInteger(saved) && saved >= 0 && saved < SKINS.length)
+      currentSkin = saved;
+  } catch { /* localStorage puede estar bloqueado */ }
+}
+
+function saveSkin() {
+  try {
+    localStorage.setItem('asteroids-skin', String(currentSkin));
+  } catch { /* localStorage puede estar bloqueado */ }
+}
+
+// Cicla a la siguiente skin (tecla S)
+function nextSkin() {
+  currentSkin = (currentSkin + 1) % SKINS.length;
+  skinFlash = 1.5;
+  saveSkin();
+}
+
 // ── Ship ──────────────────────────────────────────────────────────────────────
 class Ship {
   constructor() { this.reset(); }
@@ -232,16 +293,17 @@ class Ship {
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.rotate(this.angle);
-    ctx.strokeStyle = '#fff';
+
+    const skin = currentSkinOf();
+    ctx.strokeStyle = skin.stroke;
     ctx.lineWidth   = 1.5;
     ctx.lineJoin    = 'round';
 
-    // Silueta clásica: triángulo con muesca trasera
+    // Silueta según la skin activa
     ctx.beginPath();
-    ctx.moveTo( 20,  0);   // nariz
-    ctx.lineTo(-12, -9);   // ala izquierda
-    ctx.lineTo( -7,  0);   // muesca trasera
-    ctx.lineTo(-12,  9);   // ala derecha
+    ctx.moveTo(skin.path[0][0], skin.path[0][1]);
+    for (let i = 1; i < skin.path.length; i++)
+      ctx.lineTo(skin.path[i][0], skin.path[i][1]);
     ctx.closePath();
     ctx.stroke();
 
@@ -251,7 +313,7 @@ class Ship {
       ctx.moveTo(-8, -4);
       ctx.lineTo(-8 - rand(6, 14), 0);
       ctx.lineTo(-8,  4);
-      ctx.strokeStyle = 'rgba(255, 130, 0, 0.85)';
+      ctx.strokeStyle = skin.flame;
       ctx.stroke();
     }
 
@@ -405,6 +467,10 @@ function updateStars(dt) {
 }
 
 // ── Update ────────────────────────────────────────────────────────────────────
+function updateSkinFlash(dt) {
+  if (skinFlash > 0) skinFlash -= dt;
+}
+
 function update(dt) {
   if (state === 'gameover') {
     if (pressed('Space')) initGame();
@@ -415,6 +481,8 @@ function update(dt) {
 
   if (state === 'dead') {
     deadTimer -= dt;
+    updateSkinFlash(dt);
+    if (pressed('KeyS')) nextSkin();
     particles.forEach(p => p.update(dt));
     particles = particles.filter(p => !p.dead);
     asteroids.forEach(a => a.update(dt));
@@ -428,6 +496,10 @@ function update(dt) {
   if (pressed('Space')) {
     bullets.push(...ship.tryShoot());
   }
+
+  // Cambiar de skin
+  if (pressed('KeyS')) nextSkin();
+  updateSkinFlash(dt);
 
   // Aparición de estrella fugaz (máximo 1 en el campo)
   if (stars.length === 0) {
@@ -517,17 +589,17 @@ function update(dt) {
 
 // ── Draw ──────────────────────────────────────────────────────────────────────
 function drawLifeIcon(x, y) {
+  const skin = currentSkinOf();
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(-Math.PI / 2);
-  ctx.strokeStyle = '#fff';
+  ctx.strokeStyle = skin.stroke;
   ctx.lineWidth   = 1.2;
   ctx.lineJoin    = 'round';
   ctx.beginPath();
-  ctx.moveTo( 9,  0);
-  ctx.lineTo(-6, -5);
-  ctx.lineTo(-3,  0);
-  ctx.lineTo(-6,  5);
+  ctx.moveTo(skin.lifePath[0][0], skin.lifePath[0][1]);
+  for (let i = 1; i < skin.lifePath.length; i++)
+    ctx.lineTo(skin.lifePath[i][0], skin.lifePath[i][1]);
   ctx.closePath();
   ctx.stroke();
   ctx.restore();
@@ -545,6 +617,15 @@ function drawHUD() {
 
   for (let i = 0; i < lives; i++)
     drawLifeIcon(W - 16 - i * 22, 18);
+
+  // Indicador temporal de la skin activa
+  if (skinFlash > 0) {
+    const alpha = Math.min(1, skinFlash / 0.5).toFixed(2);
+    ctx.textAlign  = 'right';
+    ctx.fillStyle  = `rgba(255,255,255,${alpha})`;
+    ctx.font       = '13px monospace';
+    ctx.fillText(`SKIN: ${currentSkinOf().name}`, W - 14, H - 14);
+  }
 
   if (ship.speedBoost > 0)
     ctx.fillText(`VELOCIDAD ${ship.speedBoost.toFixed(1)}s`, 14, H - 14);
@@ -589,4 +670,5 @@ function loop(ts) {
 }
 
 initGame();
+loadSkin();
 requestAnimationFrame(loop);
