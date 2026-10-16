@@ -170,7 +170,8 @@ class ShootingStar {
 }
 
 // ── Skins ─────────────────────────────────────────────────────────────────────
-// Cada skin define silueta (path), color de trazo y color de la llama
+// Cada skin define silueta (path), color de trazo, color de la llama,
+// escala de la nave (scale) y multiplicador de puntos (mult)
 const SKINS = [
   {
     name: 'CLÁSICA',
@@ -178,6 +179,8 @@ const SKINS = [
     flame: 'rgba(255, 130, 0, 0.85)',
     path: [[20, 0], [-12, -9], [-7, 0], [-12, 9]],
     lifePath: [[9, 0], [-6, -5], [-3, 0], [-6, 5]],
+    scale: 1,
+    mult: 1,
   },
   {
     name: 'ROJA',
@@ -185,6 +188,8 @@ const SKINS = [
     flame: 'rgba(255, 80, 80, 0.9)',
     path: [[22, 0], [-14, -10], [-6, 0], [-14, 10]],
     lifePath: [[9, 0], [-6, -5], [-3, 0], [-6, 5]],
+    scale: 1,
+    mult: 1,
   },
   {
     name: 'AZUL',
@@ -192,6 +197,8 @@ const SKINS = [
     flame: 'rgba(80, 200, 255, 0.9)',
     path: [[22, 0], [-10, -11], [-4, -3], [-4, 3], [-10, 11]],
     lifePath: [[9, 0], [-5, -6], [-2, 0], [-5, 6]],
+    scale: 1,
+    mult: 1,
   },
   {
     name: 'VERDE',
@@ -199,6 +206,17 @@ const SKINS = [
     flame: 'rgba(180, 255, 80, 0.9)',
     path: [[18, 0], [-12, -8], [-12, 0], [-12, 8]],
     lifePath: [[8, 0], [-5, -4], [-3, 0], [-5, 4]],
+    scale: 1,
+    mult: 1,
+  },
+  {
+    name: 'MORADA',
+    stroke: '#b366ff',
+    flame: 'rgba(190, 110, 255, 0.9)',
+    path: [[40, 0], [-24, -18], [-14, 0], [-24, 18]],
+    lifePath: [[9, 0], [-6, -5], [-3, 0], [-6, 5]],
+    scale: 2,   // El doble de grande que la nave original
+    mult: 2,    // Otorga el doble de puntos
   },
 ];
 
@@ -240,11 +258,10 @@ class Ship {
     this.angle  = -Math.PI / 2;
     this.vx     = 0;
     this.vy     = 0;
-    this.radius = 12;
+    this.radius = 12 * currentSkinOf().scale;
     this.thrusting     = false;
     this.invincible    = 3;
     this.shootCooldown = 0;
-    this.speedBoost    = 0;
     this.speedBoost    = 0;
     this.tripleShot    = 0;
     this.shield        = 0;
@@ -253,6 +270,8 @@ class Ship {
 
   update(dt) {
     if (this.dead) return;
+    // El tamaño se ajusta a la skin activa (permite cambiarla en pleno vuelo)
+    this.radius = 12 * currentSkinOf().scale;
     if (this.invincible    > 0) this.invincible    -= dt;
     if (this.shootCooldown > 0) this.shootCooldown -= dt;
     if (this.speedBoost    > 0) this.speedBoost    -= dt;
@@ -284,7 +303,7 @@ class Ship {
   tryShoot() {
     if (this.shootCooldown > 0 || this.dead) return [];
     this.shootCooldown = 0.2;
-    const NOSE = 21;
+    const NOSE = 21 * currentSkinOf().scale;
     const ox = this.x + Math.cos(this.angle) * NOSE;
     const oy = this.y + Math.sin(this.angle) * NOSE;
 
@@ -313,8 +332,9 @@ class Ship {
     ctx.rotate(this.angle);
 
     const skin = currentSkinOf();
+    const s    = skin.scale;
     ctx.strokeStyle = skin.stroke;
-    ctx.lineWidth   = 1.5;
+    ctx.lineWidth   = 1.5 * s;
     ctx.lineJoin    = 'round';
 
     // Silueta según la skin activa
@@ -328,9 +348,9 @@ class Ship {
     // Llama del propulsor
     if (this.thrusting && Math.random() > 0.35) {
       ctx.beginPath();
-      ctx.moveTo(-8, -4);
-      ctx.lineTo(-8 - rand(6, 14), 0);
-      ctx.lineTo(-8,  4);
+      ctx.moveTo(-8 * s, -4 * s);
+      ctx.lineTo(-8 * s - rand(6, 14) * s, 0);
+      ctx.lineTo(-8 * s,  4 * s);
       ctx.strokeStyle = skin.flame;
       ctx.stroke();
     }
@@ -344,7 +364,7 @@ class Ship {
       ctx.strokeStyle = `rgba(120, 200, 255, ${this.shield < 1 && Math.floor(this.shield * 8) % 2 === 0 ? 0.15 : 0.7})`;
       ctx.lineWidth   = 1.5;
       ctx.beginPath();
-      ctx.arc(0, 0, 22, 0, Math.PI * 2);
+      ctx.arc(0, 0, 22 * currentSkinOf().scale, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
     }
@@ -498,6 +518,11 @@ function explode(x, y, count = 8) {
   for (let i = 0; i < count; i++) particles.push(new Particle(x, y));
 }
 
+// Suma puntos aplicando el multiplicador de la skin activa
+function addScore(points) {
+  score += points * currentSkinOf().mult;
+}
+
 function killShip() {
   explode(ship.x, ship.y, 14);
   ship.dead       = true;
@@ -584,7 +609,7 @@ function update(dt) {
       if (!a.dead && !b.dead && dist(b, a) < a.radius) {
         b.dead = true;
         a.dead = true;
-        score += POINTS[a.size];
+        addScore(POINTS[a.size]);
         explode(a.x, a.y, a.size * 5);
         newAsteroids.push(...a.split());
 
@@ -602,7 +627,7 @@ function update(dt) {
       if (!s.dead && !b.dead && dist(b, s) < s.radius) {
         b.dead = true;
         s.dead = true;
-        score += 250;
+        addScore(250);
         explode(s.x, s.y, 10);
       }
     }
@@ -626,7 +651,7 @@ function update(dt) {
         if (ship.shield > 0) {
           // El escudo absorbe el impacto y destruye el asteroide
           a.dead = true;
-          score += POINTS[a.size];
+          addScore(POINTS[a.size]);
           explode(a.x, a.y, a.size * 5);
           newAsteroids.push(...a.split());
 
@@ -649,7 +674,7 @@ function update(dt) {
         if (ship.shield > 0) {
           // El escudo absorbe el impacto: solo se gana el bonus
           s.dead = true;
-          score += 250;
+          addScore(250);
           explode(s.x, s.y, 10);
         } else {
           s.dead = true;
@@ -698,10 +723,11 @@ function drawHUD() {
   // Indicador temporal de la skin activa
   if (skinFlash > 0) {
     const alpha = Math.min(1, skinFlash / 0.5).toFixed(2);
+    const mult  = currentSkinOf().mult;
     ctx.textAlign  = 'right';
     ctx.fillStyle  = `rgba(255,255,255,${alpha})`;
     ctx.font       = '13px monospace';
-    ctx.fillText(`SKIN: ${currentSkinOf().name}`, W - 14, H - 14);
+    ctx.fillText(`SKIN: ${currentSkinOf().name}${mult > 1 ? `  PUNTOS x${mult}` : ''}`, W - 14, H - 14);
   }
 
   if (ship.speedBoost > 0)
