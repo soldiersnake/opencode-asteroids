@@ -1,0 +1,73 @@
+name: Triage de issues
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  triage:
+    # Ignora issues creados por bots para evitar bucles
+    if: github.event.sender.type != 'Bot'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Instalar opencode
+        run: curl -fsSL https://opencode.ai/install | bash
+
+      - name: Ejecutar triage con opencode
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          opencode run -m opencode-go/glm-5.3-flash "$(cat <<'PROMPT'
+          Estás haciendo triage automático de un issue recién creado en este repositorio (un clon de Asteroids en JavaScript vanilla; toda la lógica vive en game.js, index.html solo hospeda el canvas). El número de issue está en la variable de entorno ISSUE_NUMBER.
+
+          Pasos a seguir en orden:
+
+          1. Lee el issue con: gh issue view $ISSUE_NUMBER --json title,body,author,labels
+          2. Explora el repositorio (game.js, index.html, README.md, AGENTS.md) para entender el contexto real del pedido antes de clasificarlo.
+          3. Clasifica el issue:
+             - tipo: bug | mejora | tarea | pregunta
+             - prioridad: alta | media | baja
+          4. Asegura que los labels necesarios existan (crea los que falten; ignora el error "label_name_already_exists" con `|| true`):
+             - bug (color d73a4a), enhancement (a2eeef), question (d876e3), tarea (1d76db)
+             - prioridad: alta (b60205), prioridad: media (fbca04), prioridad: baja (0e8a9e)
+             Luego aplica al issue SOLO los que correspondan:
+             gh issue edit $ISSUE_NUMBER --add-labels "<labels separados por coma>"
+          5. Publica un comentario de análisis en el issue (gh issue comment), en español, con esta estructura:
+             ## Análisis automático del issue
+             - **Resumen**: qué pide el issue en 1-3 líneas
+             - **Tipo**: bug | mejora | tarea | pregunta
+             - **Prioridad sugerida**: alta | media | baja — con justificación de una línea
+             - **Archivos relacionados**: referencias reales del repo en formato `archivo:línea` (verifica las líneas antes de citarlas)
+             - **Criterios de aceptación**: checklist con elementos "- [ ]" (2 a 5 ítems concretos y verificables)
+             Termina el comentario con una línea: "_Generado automáticamente — revisa y ajusta si es necesario._"
+          6. Edita el cuerpo del issue PRESERVANDO el texto original del autor completo e intacto al inicio. Al final agrega una sección delimitada así:
+
+             <!-- triage-inicio -->
+             **Triage automático**
+             - Tipo: <tipo>
+             - Prioridad: <prioridad>
+             - Labels: <labels aplicados>
+             - Fecha: <fecha UTC actual>
+             - Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
+             <!-- triage-fin -->
+
+             Si los marcadores ya existen en el cuerpo, reemplaza únicamente el contenido entre ellos (la operación debe ser idempotente).
+
+          Reglas obligatorias:
+          - No modifiques archivos del repositorio ni hagas commit ni push.
+          - Nunca alteres ni reescribas el texto original del autor del issue; solo agrega información.
+          - Usa solo `gh` (ya autenticado con GH_TOKEN) para leer y modificar el issue.
+          - Si el issue es demasiado ambiguo para clasificar, usa tipo "tarea", prioridad "media" y explícalo en el comentario.
+          PROMPT
+          )"
